@@ -32,8 +32,21 @@ Run the script locally
 python3 get_projects.py
 ```
 
-Script will output `project_data.json` file. Edit the file as necessary.
+Script will output `project_data.json` file. Edit the file as necessary. Example below
 
+```json
+[
+    {
+        "org_name": "Test_Org",
+        "org_id": "**************",
+        "project_name": "nodejs-goof/nodejs-goof(main)",
+        "project_id": "**************",
+        "type": "sast",
+        "target_file": "",
+        "status": "active"
+    }
+]
+```
 
 ### Activate / Deactivate Projects
 
