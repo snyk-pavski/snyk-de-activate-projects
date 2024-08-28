@@ -17,9 +17,8 @@ pip install -r requirements.txt
 
 Update variables in `get_projects.py`. Get the latest API Version from [Snyk's REST API](https://apidocs.snyk.io/)
 ```py
-GROUP_ID = "******"
 API_VERSION = "2024-08-15"
-API_KEY = "*****"
+RATE_LIMIT_DELAY = 0.2 (in seconds)
 ```
 
 ## Usage
@@ -29,7 +28,7 @@ API_KEY = "*****"
 Run the script locally
 
 ```sh
-python3 get_projects.py
+python3 get_projects_v2.py --group YOUR_GROUP_ID --token your_api_token
 ```
 
 Script will output `project_data.json` file. Edit the file as necessary. Example below
@@ -51,5 +50,5 @@ Script will output `project_data.json` file. Edit the file as necessary. Example
 ### Activate / Deactivate Projects
 
 ```sh
-python3 change_proj_status.py project_data.json --action activate/deactivate --api_key your_api_key
+python3 change_proj_status.py project_data.json --action activate/deactivate --token your_api_token
 ```
