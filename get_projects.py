@@ -1,81 +1,134 @@
 import json
 import requests
+import argparse
+import time
 
-# Set local Vars
-GROUP_ID = "*****"
-API_VERSION = "2024-08-15"
-API_KEY = "*****"
+# Define API version and URL base
+API_VERSION = "2024-08-22"
+API_BASE_URL = "https://api.snyk.io"
+RATE_LIMIT_DELAY = 0.2
 
+# Parse command-line arguments
+parser = argparse.ArgumentParser()
+parser.add_argument("--group", required=True, help="Group ID")
+parser.add_argument("--token", required=True, help="API token")
+args = parser.parse_args()
 
-def get_organizations(group_id, api_version, api_key):
-  url = f"https://api.snyk.io/rest/groups/{group_id}/orgs?version={api_version}&limit=100"
-  headers = {
-      "accept": "application/vnd.api+json",
-      "Authorization": f"{api_key}"
-  }
-  response = requests.get(url, headers=headers)
-  response.raise_for_status()
+def get_organizations(group_id, api_key):
+    """
+    Fetches all organizations within a group with pagination.
 
-  data = response.json()
-  return data["data"]
+    Args:
+        group_id (str): ID of the group.
+        api_key (str): User's Snyk API key.
 
-def get_projects(org_id, api_version, api_key):
-  url = f"https://api.snyk.io/rest/orgs/{org_id}/projects?version={api_version}&limit=100"
-  headers = {
-      "accept": "application/vnd.api+json",
-      "Authorization": f"{api_key}"
-  }
-  response = requests.get(url, headers=headers)
-  response.raise_for_status()
+    Returns:
+        list: List of all organizations within the group.
+    """
+    url = f"{API_BASE_URL}/rest/groups/{group_id}/orgs?version={API_VERSION}&limit=100"
+    headers = {"accept": "application/vnd.api+json", "authorization": f"{api_key}"}
+    organizations = []
 
-  data = response.json()
-  return data["data"]
+    while url:
+        start_time = time.time()
+        response = requests.get(url, headers=headers)
+        end_time = time.time()
 
-def extract_project_info(project, organizations):
-  org_id = project["relationships"]["organization"]["data"]["id"]
-  project_id = project["id"]
-  status = project["attributes"]["status"]
-  project_name = project["attributes"]["name"]
-  type = project["attributes"]["type"]
-  target_file = project["attributes"]["target_file"]
-  
-  # Find the organization in the organizations dictionary
-  org_info = organizations.get(org_id)  
+        response.raise_for_status()  # Raise error for non-2xx status codes
 
-  # Handle potential case where org_id is not found
-  if org_info is None:
-      # Handle missing organization (e.g., log a warning)
-      print(f"Warning: Organization with ID {org_id} not found")
-      return None  # Or return a default value
+        data = response.json()
+        organizations.extend(data["data"])
 
-  org_name = org_info["attributes"]["name"]
-
-  return {"org_name": org_name, "org_id": org_id, "project_name": project_name, "project_id": project_id, "type": type, "target_file": target_file, "status": status}
+        reponse_code = response.status_code
+        
+        # Print request details
+        print(f"Response Code: {reponse_code} - Request URL: {url}")
 
 
-def main():
-  group_id = GROUP_ID
-  api_version = API_VERSION 
-  api_key = API_KEY
+        # Do not upset the API Overlords 
+        time.sleep(RATE_LIMIT_DELAY)
 
-  # Get organizations and store them in a dictionary
-  organizations = get_organizations(group_id, api_version, api_key)
-  organizations_dict = {org["id"]: org for org in organizations}
+        # Check for next page link
+        links = data.get("links", {})
+        url = links.get("next")
 
-  # Process organizations and projects
-  project_data = []
-  for organization in organizations:
-    org_id = organization["id"]
-    projects = get_projects(org_id, api_version, api_key)
+        # Add "https://api.snyk.io" if missing from next URL
+        if url and not url.startswith("https://"):
+            url = f"{API_BASE_URL}{url}"
+        
+
+
+    return organizations
+
+
+def get_projects(org_id, api_key):
+    url = f"{API_BASE_URL}/rest/orgs/{org_id}/projects?version={API_VERSION}&limit=100"
+    headers = {"accept": "application/vnd.api+json", "authorization": f"{api_key}"}
+    projects = []
+
+    while url:
+        start_time = time.time()
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        end_time = time.time()
+
+        data = response.json()
+        projects.extend(data["data"])
+
+        reponse_code = response.status_code
+
+        # Print request details
+        print(f"Response Code: {reponse_code} - Request URL: {url}")
+
+        # Do not upset the API Overlords 
+        time.sleep(RATE_LIMIT_DELAY)
+
+        # Check for next page link
+        links = data.get("links", {})
+        url = links.get("next")
+
+        # Add "https://api.snyk.io" if missing from next URL
+        if url and not url.startswith("https://"):
+            url = f"{API_BASE_URL}{url}"
+
+
+    return projects
+
+
+def extract_project_data(projects, org_name):
+    project_data = []
     for project in projects:
-      project_info = extract_project_info(project, organizations_dict)
-      project_data.append(project_info)
+        project_info = {
+            "org_name": org_name,
+            "org_id": project["relationships"]["organization"]["data"]["id"],
+            "project_name": project["attributes"]["name"],
+            "project_id": project["id"],
+            "project_type": project["attributes"]["type"],
+            "target_file": project["attributes"]["target_file"],
+            "status": project["attributes"]["status"]
+        }
+        project_data.append(project_info)
+    return project_data
 
-  # Write project data to JSON file
-  with open("project_data.json", "w") as outfile:
-    json.dump(project_data, outfile, indent=4)
 
-  print("Project data written to project_data.json")
+def write_to_file(data, filename):
+    with open(filename, "w") as f:
+        json.dump(data, f, indent=4)
 
 if __name__ == "__main__":
-  main()
+    group_id = args.group
+    api_key = args.token
+
+    organizations = get_organizations(group_id, api_key)
+    project_data = []
+
+    for org in organizations:
+        org_name = org["attributes"]["name"]
+        projects = get_projects(org["id"], api_key)
+        org_project_data = extract_project_data(projects, org_name)
+        project_data.extend(org_project_data)
+
+    # Write the project data to a file
+    write_to_file(project_data, "project_data.json")
+
+    print("Project data written to project_data.json")
